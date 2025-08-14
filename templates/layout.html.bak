@@ -1,6 +1,5 @@
-<!-- --- START OF REPLACEMENT FOR /templates/layout.html --- -->
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,4 +30,3 @@
     </script>
 </body>
 </html>
-<!-- --- END OF REPLACEMENT FOR /templates/layout.html --- -->
