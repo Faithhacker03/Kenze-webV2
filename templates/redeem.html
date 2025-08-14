@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+{% block title %}Redeem Key{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card bg-dark border-secondary text-white" style="background-color: #1e1e1e !important;">
+                <div class="card-header">
+                    <h3>Redeem Premium Key</h3>
+                </div>
+                <div class="card-body">
+                    {% if is_premium %}
+                        <div class="alert alert-success">
+                            <h4 class="alert-heading">You are already a Premium User!</h4>
+                            <p>Your current premium access expires on <strong>{{ datetime.fromisoformat(user.key_expiry).strftime('%B %d, %Y') }}</strong>.</p>
+                        </div>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('redeem') }}">
+                        <div class="mb-3">
+                            <label for="key_code" class="form-label">Enter your Premium Key Code</label>
+                            <input type="text" class="form-control" id="key_code" name="key_code" required placeholder="PREMIUM-xxxxxxxx" style="background-color: #2a2a2a; color: #e0e0e0; border-color: #444;">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Redeem Key</button>
+                    </form>
+                    {% endif %}
+                     <a href="{{ url_for('checker_page') }}" class="btn btn-outline-light w-100 mt-3">Back to Checker</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

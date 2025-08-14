@@ -1,0 +1,76 @@
+{% extends "layout.html" %}
+{% block title %}Admin Panel{% endblock %}
+{% block content %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-secondary mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#"><i class="bi bi-shield-shaded"></i> Admin Panel</a>
+        <div class="ms-auto d-flex align-items-center">
+             <span class="navbar-text me-3">Welcome, <strong>{{ session.username }}</strong></span>
+             <a class="btn btn-danger" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="card bg-dark border-secondary mb-4" style="background-color: #1e1e1e !important;">
+        <div class="card-header"><h4>Generate New Premium Key</h4></div>
+        <div class="card-body">
+            <form action="{{ url_for('generate_key') }}" method="POST" class="row g-3 align-items-end">
+                <div class="col-auto"><label for="duration" class="form-label">Key Duration (Days)</label><input type="number" class="form-control" name="duration" id="duration" value="30" min="1" style="background-color: #2a2a2a; color: #e0e0e0; border-color: #444;"></div>
+                <div class="col-auto"><button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Generate Key</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12 mb-4">
+            <div class="card bg-dark border-secondary" style="background-color: #1e1e1e !important;"><div class="card-header"><h5><i class="bi bi-key-fill"></i> Generated Keys</h5></div>
+                <div class="card-body"><div class="table-responsive"><table class="table table-dark table-striped table-hover">
+                    <thead><tr><th>Key</th><th>Duration</th><th>Expires On</th><th>Status</th><th>Redeemed By</th></tr></thead>
+                    <tbody id="keys-table-body"></tbody>
+                </table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-12">
+            <div class="card bg-dark border-secondary" style="background-color: #1e1e1e !important;"><div class="card-header"><h5><i class="bi bi-people-fill"></i> Registered Users</h5></div>
+                <div class="card-body"><div class="table-responsive"><table class="table table-dark table-striped table-hover">
+                    <thead><tr><th>Username</th><th>Is Admin</th><th>Registered On</th><th>Premium Status</th></tr></thead>
+                    <tbody id="users-table-body"></tbody>
+                </table></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function fetchData() {
+        fetch("{{ url_for('get_admin_data') }}").then(r => r.json()).then(data => {
+            populateKeysTable(data.keys);
+            populateUsersTable(data.users);
+        }).catch(e => console.error('Error fetching data:', e));
+    }
+    function populateKeysTable(keys) {
+        const tbody = document.getElementById('keys-table-body');
+        tbody.innerHTML = '';
+        keys.sort((a,b) => new Date(b.created_on) - new Date(a.created_on)).forEach(k => {
+            const expiry = new Date(k.expiry_date);
+            const status = k.is_redeemed ? `<span class="badge bg-success">Redeemed</span>` : expiry < new Date() ? `<span class="badge bg-danger">Expired</span>` : `<span class="badge bg-info">Available</span>`;
+            tbody.innerHTML += `<tr><td><code>${k.key}</code></td><td>${k.duration_days} days</td><td>${expiry.toLocaleDateString()}</td><td>${status}</td><td>${k.redeemed_by || 'N/A'}</td></tr>`;
+        });
+    }
+    function populateUsersTable(users) {
+        const tbody = document.getElementById('users-table-body');
+        tbody.innerHTML = '';
+        users.sort((a,b) => new Date(b.registered_on) - new Date(a.registered_on)).forEach(u => {
+            let premiumStatus = '<span class="badge bg-secondary">Free Tier</span>';
+            if (u.is_admin) premiumStatus = '<span class="badge bg-warning">Admin</span>';
+            else if (u.key_expiry && new Date(u.key_expiry) > new Date()) premiumStatus = `<span class="badge bg-success">Premium</span>`;
+            tbody.innerHTML += `<tr><td>${u.username}</td><td>${u.is_admin ? '✔' : '❌'}</td><td>${new Date(u.registered_on).toLocaleDateString()}</td><td>${premiumStatus}</td></tr>`;
+        });
+    }
+    fetchData();
+    setInterval(fetchData, 15000); // Auto-refresh every 15 seconds
+});
+</script>
+{% endblock %}

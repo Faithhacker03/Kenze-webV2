@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{% block title %}Register{% endblock %}
+{% block content %}
+<div class="auth-wrapper">
+    <div class="auth-container">
+        <form method="POST" action="{{ url_for('register') }}">
+            <h1>Register</h1>
+            <div class="input-box">
+                <input type="text" name="username" placeholder="Choose a Username" required>
+                <i class="bi bi-person-fill"></i>
+            </div>
+            <div class="input-box">
+                <input type="password" name="password" placeholder="Choose a Password" required>
+                <i class="bi bi-lock-fill"></i>
+            </div>
+            <button type="submit" class="auth-btn">Register</button>
+            <div class="register-link">
+                <p>Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
