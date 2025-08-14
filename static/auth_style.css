@@ -1,8 +1,11 @@
-body {
+/* --- START OF REPLACEMENT FOR /static/auth_style.css --- */
+html, body {
+    height: 100%;
     margin: 0;
     padding: 0;
     font-family: sans-serif;
 }
+
 .auth-wrapper {
     display: flex;
     justify-content: center;
@@ -93,6 +96,10 @@ body {
 .flash-messages {
     position: fixed;
     top: 1rem;
-    right: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 2000;
+    min-width: 300px;
+    text-align: center;
 }
+/* --- END OF REPLACEMENT FOR /static/auth_style.css --- */
