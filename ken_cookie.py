@@ -1,6 +1,6 @@
-# --- START OF FILE change_cookie.py ---
+# --- START OF REPLACEMENT FOR ken_cookie.py ---
 # This module provides a simple, static set of cookies.
-# Manually update the values below when needed.
+# The main change is wrapping the dictionary in a function called get_cookies().
 
 def get_cookies():
     """Returns a manually defined, static dictionary of cookies."""
@@ -15,4 +15,4 @@ def get_cookies():
     }
     return cookies
 
-# --- END OF FILE change_cookie.py ---
+# --- END OF REPLACEMENT FOR ken_cookie.py ---

